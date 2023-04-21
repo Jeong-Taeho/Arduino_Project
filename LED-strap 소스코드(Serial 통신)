@@ -1,0 +1,209 @@
+#include "WiFiEsp.h"
+#include <SoftwareSerial.h>
+#include <Adafruit_NeoPixel.h>                         // Including Adafruit library to control the NeoPixel.
+#include <Firebase_ESP_Client.h>
+#include <addons/TokenHelper.h>
+
+#define LED_STRAP 7
+#define COMM_RX 50
+#define COMM_TX 51
+
+#define API_KEY "AIzaSyCOwakPMK4gxJuPS_5NntqLKAAh-sfq2lM"
+#define USER_EMAIL "slthdwnsl85@gmail.com"
+#define USER_PASSWORD "gkathdwn0209"
+
+//<databaseName>.firebaseio.com or <databaseName>.<region>.firebasedatabase.app
+#define DATABASE_URL "https://airhockey-53732-default-rtdb.firebaseio.com"
+#define DATABASE_SECRET "FuYu1IH5HBo37Ea4Jh8sJ10ch4Uz9lm1gjksVk23"
+
+// Define Firebase Data object
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+
+bool taskCompleted = false;
+
+unsigned long dataMillis = 0;
+
+const int NumberOfPixels = 112;
+int  lightDelay = 10;
+
+char ssid[] = "ICT-D-2.4G";            // your network SSID (name)
+char pass[] = "ictd123!";        // your network password
+int status = WL_IDLE_STATUS;     // the Wifi radio's status
+
+WiFiEspClient client;
+
+SoftwareSerial COMM(COMM_RX, COMM_TX);
+Adafruit_NeoPixel pixels(NumberOfPixels, LED_STRAP, NEO_GRB + NEO_KHZ800); //The type of NeoPixel is defined.
+
+void setup() {
+  Serial.begin(9600);
+  COMM.begin(9600);
+  pixels.begin(); // Initialises the NeoPixel strip.
+
+  Serial3.begin(115200);
+  WiFi.init(&Serial3);
+
+  // check for the presence of the shield
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WiFi shield not present");
+    // don't continue
+    while (true);
+  }
+
+  // attempt to connect to WiFi network
+  while ( status != WL_CONNECTED) {
+    Serial.print("Attempting to connect to WPA SSID: ");
+    Serial.println(ssid);
+    // Connect to WPA/WPA2 network
+    status = WiFi.begin(ssid, pass);
+  }
+
+  // you're connected now, so print out the data
+  Serial.println("You're connected to the network");
+  Serial.println("");
+
+  // firebase
+  config.api_key = API_KEY;
+  auth.user.email = USER_EMAIL;
+  auth.user.password = USER_PASSWORD;
+  config.database_url = DATABASE_URL;
+  config.signer.tokens.legacy_token = "FuYu1IH5HBo37Ea4Jh8sJ10ch4Uz9lm1gjksVk23";
+  config.token_status_callback = tokenStatusCallback; // see addons/TokenHelper.h
+config.timeout.serverResponse = 10 * 1000;
+
+  // Limit the size of response payload to be collected in FirebaseData
+  fbdo.setResponseSize(2048);
+
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
+
+  if (Firebase.ready()) {
+    Serial.println("test");
+
+    FirebaseJson json;
+    json.set("blue_score", "1");
+    //Firebase.RTDB.setJSON(&fbdo, "/Team_score",&json);
+    //Firebase.RTDB.pushJSON(&fbdo, "/Team_score",&json);
+    //Firebase.RTDB.setInt(&fbdo, "/Team_score/blue_score",1);
+    if (Firebase.RTDB.setInt(&fbdo, F("/Team_score/blue_score"), 1) != "ok") {
+      Serial.println(fbdo.errorReason().c_str());    
+    } else {
+      Serial.println("ok");
+    }
+  } else {
+    Serial.println("fail");
+  }
+}
+
+void loop() {
+
+  if (COMM.available()) {
+    char c = (char)COMM.read();
+    if (c == 'b') {
+      dynamicPixelsBlue();
+      init_strap();
+    } else if (c == 'r') {
+      dynamicPixelsRed();
+      init_strap();
+    } else if (c == 'i') {
+      init_strap();
+    }
+  }
+}
+
+void dynamicPixelsBlue() {                             // Function to make a light show when blue team scores.
+  pixels.clear();                                      // Turns off all LED's, so it's ready for the following light pattern.
+  for (int i = 0; i < NumberOfPixels; i++) {           // For loop to make wave effect with 10 pixels.
+    pixels.setPixelColor(i, pixels.Color(0, 0, 255));  // Pixel i is set to blue.
+    pixels.setPixelColor(i - 10, pixels.Color(0, 0, 0)); // The pixel that is 10 behind of pixel i is turned off.
+    pixels.show();                                     // Send the updated pixel colors to the hardware.
+    delay(lightDelay);
+  }                                // Pause before next pass through loop
+
+  for (int i = 112; i > 0; i--) {                       // For loop to make wave effect with 10 pixels but in the other direction than above.
+    pixels.setPixelColor(i, pixels.Color(0, 0, 255));  // Pixel i is set to blue.
+    pixels.setPixelColor(i + 10, pixels.Color(0, 0, 0)); // The pixel that is 10 infront of pixel i is turned off.
+    pixels.show();                                     // Send the updated pixel colors to the hardware.
+    delay(lightDelay);
+  }                                // Pause before next pass through loop
+
+  for (int i = 0; i < NumberOfPixels; i++) {           // For loop to turn on all pixels.
+    pixels.setPixelColor(i, pixels.Color(0, 0, 255));
+  } // Sets all pixels to blue.
+  pixels.show();                                     // Send the updated pixel colors to the hardware.
+  delay(lightDelay + 200);                           // Keeps all LED's on for 210 millisecs.
+
+  for (int i = 0; i < NumberOfPixels; i++) {           // For loop to turn off all pixels.
+    pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+  }   // Sets all pixels to no color (off).
+  pixels.show();                                     // Send the updated pixel colors to the hardware.
+  delay(lightDelay + 200);                           // Keeps all LED's off for 210 millisecs.
+
+  for (int i = 0; i < NumberOfPixels; i++) {           // For loop to turn on all pixels.
+    pixels.setPixelColor(i, pixels.Color(0, 0, 255));
+  } // Sets all pixels to blue.
+  pixels.show();                                     // Send the updated pixel colors to the hardware.
+  delay(lightDelay + 200);                           // Keeps all LED's on for 210 millisecs.
+
+  for (int i = 0; i < NumberOfPixels; i++) {           // For loop to turn off all pixels.
+    pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+  }   // Sets all pixels to no color (off).
+  pixels.show();                                     // Send the updated pixel colors to the hardware.
+  delay(lightDelay + 200);                           // Keeps all LED's off for 210 millisecs.
+}
+
+void dynamicPixelsRed() {                              // Exactly same function and structure as the blue light show, but the color is instead red.
+  pixels.clear();
+  for (int i = 0; i < NumberOfPixels; i++) {
+    pixels.setPixelColor(i, pixels.Color(255, 0, 0));
+    pixels.setPixelColor(i - 10, pixels.Color(0, 0, 0));
+    pixels.show();
+    delay(lightDelay);
+  }
+
+  for (int i = 112; i > 0; i--) {
+    pixels.setPixelColor(i, pixels.Color(255, 0, 0));
+    pixels.setPixelColor(i + 10, pixels.Color(0, 0, 0));
+    pixels.show();
+    delay(lightDelay);
+  }
+
+  for (int i = 0; i < NumberOfPixels; i++) {
+    pixels.setPixelColor(i, pixels.Color(255, 0, 0));
+  }
+  pixels.show();
+  delay(lightDelay + 200);
+
+  for (int i = 0; i < NumberOfPixels; i++) {
+    pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+  }
+  pixels.show();
+  delay(lightDelay + 200);
+
+  for (int i = 0; i < NumberOfPixels; i++) {
+    pixels.setPixelColor(i, pixels.Color(255, 0, 0));
+  }
+  pixels.show();
+  delay(lightDelay + 200);
+
+  for (int i = 0; i < NumberOfPixels; i++) {
+    pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+  }
+  pixels.show();
+  delay(lightDelay + 200);
+}
+
+void init_strap() {
+  for (int i = 0; i < 56; i++) {                       // For loop to manage one half of the LED strip.
+    pixels.setPixelColor(i, pixels.Color(0, 0, 255));  // Half of the LED's is set to blue.
+    pixels.show();
+  }                                    // Send the updated pixel colors to the hardware.
+
+  for (int i = 56; i < NumberOfPixels; i++) {          // For loop to manage the other half of the LED strip.
+    pixels.setPixelColor(i, pixels.Color(255, 0, 0));  // Sets the other half of LED's to red.
+    pixels.show();
+
+  }                                    // Send the updated pixel colors to the hardware.
+}
