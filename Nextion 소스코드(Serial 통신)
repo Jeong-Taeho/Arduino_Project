@@ -1,0 +1,152 @@
+#include <SoftwareSerial.h>
+
+#define LCD_RX 4
+#define LCD_TX 5
+#define RESET_BTN 8
+#define COMM_RX 9
+#define COMM_TX 10
+
+// Set up a new SoftwareSerial object
+SoftwareSerial LCD(LCD_RX, LCD_TX);
+SoftwareSerial COMM(COMM_RX, COMM_TX);
+
+int buttonState = 0;                                   // Integer to store data from the button.
+int scoreBlue = 0;                                     // Variable to count the score for the blue team.
+int scoreRed = 0;                                      // Variable to count the score for the red team.
+boolean addScoreBlue = false;                          // Boolean to trigger animation, blue lights and increase in score for the blue team.
+boolean addScoreRed = false;                           // Boolean to trigger animation, red lights and increase in score for the red team.
+int lineTrackerTriggeredBlue = 0;                      // Variable to display animation and blue light show first and then add the score afterwards.
+int lineTrackerTriggeredRed = 0;                       // Variable to display animation and red light show first and then add the score afterwards.
+int lightDelay = 10;                                   // Integer for length of delay in light shows.
+// Varible for the pin where the NeoPixel strip is connected to
+void setup() {
+  Serial.begin(9600);
+  LCD.begin(9600);                                // Initializes the serial monitor and Nextion display.
+  COMM.begin(9600);  
+  attachInterrupt(0, addscoreblue, FALLING);           // Calls the function "addscoreblue" when signal from blue's line tracker is triggered.
+  attachInterrupt(1, addscorered, FALLING);            // Calls the function "addscorered" when signal from red's line tracker is triggered.
+  pinMode(RESET_BTN, INPUT_PULLUP);                    // Defining the button as an input.
+  COMM.write('i');
+}
+
+void loop() {
+
+  if (addScoreBlue == true) {                          // If the blue team scores, the following code is executed.
+    lineTrackerTriggeredBlue++;
+    if (lineTrackerTriggeredBlue == 1) {             // When the puck covers the line tracker, the animation and blue light show are displayed.
+      COMM.write("b");
+      LCD.print("page 1");                        // The page number is send to the Nextion display.
+      LCD.write(0xff);                            // When something is send to a Nextion display, these three lines need to be called.
+      LCD.write(0xff);
+      LCD.write(0xff);
+      delay(3000);                                   // Delay to let the animation play for 3 secs.
+      scoreBlue = scoreBlue + 1;
+      LCD.print("page 0");                        // The page number is send to the Nextion display to display the scoreboard again.
+      LCD.write(0xff);
+      LCD.write(0xff);
+      LCD.write(0xff);
+    }
+    if (lineTrackerTriggeredBlue == 2) {             // When is removed from the goal, the score is added in the Nextion display.
+      lineTrackerTriggeredBlue = 0;
+    }                 // Resets the value, so code above can be repeated if blue team scores again.
+    if (lineTrackerTriggeredBlue == 3) {
+      lineTrackerTriggeredBlue = 0;
+    }
+    if (lineTrackerTriggeredBlue == 4) {
+    }
+  }
+
+  addScoreBlue = false;                                // Sets the boolean to false again, so code above can be repeated if blue team scores again.
+  LCD.print("n0.val=");                             // Defines that the following variable is a number.
+  LCD.print(scoreBlue);                             // The variable of the blue team's score is send to the display.
+  LCD.write(0xff);
+  LCD.write(0xff);
+  LCD.write(0xff);
+
+  if (addScoreRed == true) {                           // If the red team scores, the following code is executed.
+    lineTrackerTriggeredRed++;
+    if (lineTrackerTriggeredRed == 1) {              // When the puck covers the line tracker, the animation and red light show are displayed.
+      COMM.write("r");
+      LCD.print("page 1");                        // The page number is send to the Nextion display.
+      LCD.write(0xff);
+      LCD.write(0xff);
+      LCD.write(0xff);
+      delay(3000);                                   // Delay to let the animation play for 3 secs.
+      scoreRed = scoreRed + 1;
+
+      LCD.print("page 0");                        // The page number is send to the Nextion display to display the scoreboard again.
+      LCD.write(0xff);
+      LCD.write(0xff);
+      LCD.write(0xff);
+    }
+    if (lineTrackerTriggeredRed == 2) {              // When is removed from the goal, the score is added in the Nextion display.
+      lineTrackerTriggeredRed = 0;
+    }                  // Resets the value, so code above can be repeated if red team scores again.
+    if (lineTrackerTriggeredRed == 3) {
+      lineTrackerTriggeredRed = 0;
+    }
+    if (lineTrackerTriggeredRed == 4) {
+    }
+  }
+ 
+  addScoreRed = false;                                 // Sets the boolean to false again, so code above can be repeated if red team scores again.
+  LCD.print("n1.val=");                             // Defines that the following variable is a number.
+  LCD.print(scoreRed);                              // The variable of the red team's score is send to the display.
+  LCD.write(0xff);
+  LCD.write(0xff);
+  LCD.write(0xff);
+
+  buttonState = digitalRead(RESET_BTN);                // The Arduino recieves data from the button and sets it as buttonState.
+  resetScore();                                        // Calls a function that detect if score needs to be resetted.
+  WhoWins();                                           // Calls a function to detect if one of the players won the game.
+}
+
+void addscoreblue() {                                  // Function that is called when blue team scores.
+  addScoreBlue = true;
+}                                // Sets boolean to true, so statement in loop is triggered.
+
+void addscorered() {                                   // Function that is called when red team scores.
+  addScoreRed = true;
+}                                 // Sets boolean to true, so statement in loop is triggered.
+
+void resetScore() {                                    // Function to reset the score if the button is pressed.
+  if (buttonState == LOW) {
+    scoreRed = 0;
+    scoreBlue = 0;
+    COMM.write('i');
+  }
+}
+
+void WhoWins() {                                       // Function to display winner animation.
+  if (scoreBlue == 5) {                                // If blue team scores three goals, the blue winner animation is displayed.
+
+    LCD.print("page 2");                            // The page number is send to the Nextion display.
+    LCD.write(0xff);
+    LCD.write(0xff);
+    LCD.write(0xff);
+    delay(5000);                                       // Delay to let the animation play for 5 secs.
+    resetScoreAfterWin();                              // Calls function to reset score.
+    LCD.print("page 0");                            // The page number is send to the Nextion display to display the scoreboard again.
+    LCD.write(0xff);
+    LCD.write(0xff);
+    LCD.write(0xff);
+  }
+
+  if (scoreRed == 5) {                                 // If red team scores three goals, the blue winner animation is displayed.
+    LCD.print("page 3");                            // The page number is send to the Nextion display.
+    LCD.write(0xff);
+    LCD.write(0xff);
+    LCD.write(0xff);
+    delay(5000);                                       // Delay to let the animation play for 5 secs.
+    resetScoreAfterWin();
+    LCD.print("page 0");                            // The page number is send to the Nextion display to display the scoreboard again.
+    LCD.write(0xff);
+    LCD.write(0xff);
+    LCD.write(0xff);
+  }
+}
+
+void resetScoreAfterWin() {                            // Function to reset score when one of the players won the game.
+  scoreRed = 0;
+  scoreBlue = 0;
+}
